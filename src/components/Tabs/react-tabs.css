@@ -1,0 +1,131 @@
+/* Custom styling for react-tabs to match our design */
+.react-tabs {
+  -webkit-tap-highlight-color: transparent;
+  height: 100%;
+}
+
+.react-tabs__tab-list {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  border-bottom: 1px solid #e2e8f0;
+  background-color: #f9fafb;
+  overflow-x: auto;
+  height: 40px;
+}
+
+.react-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  border-right: 1px solid #e2e8f0;
+  bottom: -1px;
+  position: relative;
+  list-style: none;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  background-color: #f3f4f6;
+  min-width: 0;
+  max-width: 16rem;
+  transition: all 0.2s ease;
+}
+
+.react-tabs__tab:hover {
+  background-color: #e5e7eb;
+}
+
+.react-tabs__tab--selected {
+  background-color: white;
+  border-bottom: 2px solid #3b82f6;
+  color: #1f2937;
+  font-weight: 500;
+}
+
+.react-tabs__tab--disabled {
+  color: #9ca3af;
+  cursor: default;
+}
+
+.react-tabs__tab--disabled:hover {
+  background-color: #f3f4f6;
+}
+
+.react-tabs__tab-panel {
+  display: none;
+  height: 100%;
+}
+
+.react-tabs__tab-panel--selected {
+  display: block;
+}
+
+.react-tabs__tab-panel:focus {
+  outline: none;
+}
+
+/* Tab content styling */
+.react-tabs__tab-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.react-tabs__tab-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.react-tabs__tab--selected .react-tabs__tab-title {
+  color: #1f2937;
+  font-weight: 600;
+}
+
+/* Dirty indicator */
+.react-tabs__dirty-indicator {
+  width: 0.5rem;
+  height: 0.5rem;
+  background-color: #f59e0b;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Close button */
+.react-tabs__close-button {
+  margin-left: 0.25rem;
+  padding: 0.25rem;
+  color: #6b7280;
+  background: none;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.react-tabs__tab:hover .react-tabs__close-button {
+  opacity: 1;
+}
+
+.react-tabs__close-button:hover {
+  color: #374151;
+  background-color: #e5e7eb;
+}
+
+/* Focus styles for accessibility */
+.react-tabs__tab:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+}
+
+.react-tabs__close-button:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
