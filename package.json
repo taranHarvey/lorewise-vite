@@ -12,9 +12,6 @@
   "dependencies": {
     "@stripe/react-stripe-js": "^5.2.0",
     "@stripe/stripe-js": "^8.1.0",
-    "@tiptap-pro/extension-ai": "^3.3.0",
-    "@tiptap-pro/extension-export-docx": "^1.0.0-beta.7",
-    "@tiptap-pro/extension-pages": "^1.0.0-alpha.8",
     "@tiptap/extension-blockquote": "^3.6.6",
     "@tiptap/extension-character-count": "^3.6.6",
     "@tiptap/extension-code-block": "^3.6.6",
@@ -44,7 +41,6 @@
     "firebase": "^12.4.0",
     "idb": "^8.0.3",
     "lucide-react": "^0.545.0",
-    "novel": "^1.0.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.9.4",

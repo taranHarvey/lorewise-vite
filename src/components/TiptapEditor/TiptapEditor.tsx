@@ -5,7 +5,6 @@ import { useAIIntegration } from '../AI/AIIntegrationExample';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
-import { ExportDocx } from '@tiptap-pro/extension-export-docx';
 import Highlight from '@tiptap/extension-highlight';
 import Strike from '@tiptap/extension-strike';
 import Superscript from '@tiptap/extension-superscript';
@@ -24,7 +23,6 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Focus from '@tiptap/extension-focus';
 import CharacterCount from '@tiptap/extension-character-count';
 import Typography from '@tiptap/extension-typography';
-import Ai from '@tiptap-pro/extension-ai';
 import { DiffExtension } from '../../extensions/DiffExtension';
 import { DiffVisualization } from '../DiffVisualization/DiffVisualization';
 import { useDiffEditor } from '../../hooks/useDiffEditor';
@@ -79,7 +77,6 @@ export default function TiptapEditor({
           class: 'text-blue-600 underline cursor-pointer',
         },
       }),
-      ExportDocx,
       Highlight.configure({
         multicolor: true,
       }),
@@ -110,19 +107,6 @@ export default function TiptapEditor({
       CharacterCount,
       Typography,
       DiffExtension, // Add diff highlighting extension
-      Ai.configure({
-        appId: import.meta.env.VITE_TIPTAP_APP_ID || '',
-        token: import.meta.env.VITE_TIPTAP_TOKEN || '',
-        autocompletion: false, // Disable for Start plan
-        showDecorations: false, // Disable highlighting for Start plan
-        hideDecorationsOnStreamEnd: true,
-        onSuccess: ({ response }) => {
-          console.log('AI response generated:', response);
-        },
-        onError: (error) => {
-          console.error('AI error:', error);
-        },
-      }),
     ],
     content: content,
     onUpdate: ({ editor }) => {
