@@ -14,7 +14,7 @@ Since `.env` is protected, you need to update it manually. Here's exactly what t
 VITE_OPENAI_API_KEY=sk-proj-YOUR_OPENAI_API_KEY_HERE
 
 # Stripe Configuration (TEST MODE - for local development)
-VITE_STRIPE_PUBLISHABLE_KEY=pk_test_51SKVFYE6dLzzZxhruc8giD4JVewHNEI5KMJtiarXOP2kNoyV3u1RI5ZOOdzzQ8dyvMQlGBi5UvRQYYrcV4oTvDgB006mRDDh2v
+VITE_STRIPE_PUBLISHABLE_KEY=pk_test_YOUR_STRIPE_PUBLISHABLE_KEY_HERE
 
 # Backend API URL
 VITE_API_URL=http://localhost:3001
@@ -51,7 +51,7 @@ You should see all ✅ green checkmarks!
 
 **For Local Development (NOW):**
 - ✅ `server.env` - Updated with test secret key
-- ⏳ `.env` - You need to update with test publishable key: `pk_test_51SKVFYE6dLzzZxhruc8giD4JVewHNEI5KMJtiarXOP2kNoyV3u1RI5ZOOdzzQ8dyvMQlGBi5UvRQYYrcV4oTvDgB006mRDDh2v`
+- ⏳ `.env` - You need to update with test publishable key: `pk_test_YOUR_TEST_PUBLISHABLE_KEY_HERE`
 
 **For Production (LATER):**
 - `.env` - Use live publishable key: `pk_live_YOUR_LIVE_PUBLISHABLE_KEY_HERE`
