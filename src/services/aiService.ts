@@ -1,4 +1,5 @@
 import type { SeriesLore } from '../documentService';
+import { modelSelectionService, type ModelName, MODEL_COSTS, getAPIModelName } from './modelSelectionService';
 
 export interface WritingContext {
   selectedText?: string;
@@ -83,10 +84,20 @@ export interface AIChatMessage {
 class AIService {
   private apiKey: string;
   private baseURL = '/api/openai/v1'; // Use proxy URL for development
-  private model = 'gpt-4-turbo-preview';
+  private defaultModel: ModelName = 'gpt-5-mini'; // Default to GPT-5 Mini (unlimited, cost-effective)
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
+  }
+
+  /**
+   * Get the current user ID (needed for model selection)
+   * This should be passed from the calling component/hook
+   */
+  private getCurrentUserId(): string | null {
+    // Try to get from auth context if available
+    // Otherwise, this will be passed as a parameter
+    return null;
   }
 
   // Build context for AI requests
@@ -101,14 +112,46 @@ class AIService {
   }
 
   // Generate content based on prompt and context
-  async generateContent(prompt: string, context: WritingContext): Promise<string> {
+  async generateContent(
+    prompt: string, 
+    context: WritingContext,
+    userId?: string,
+    taskType: AIActionMode = 'improve'
+  ): Promise<string> {
     const systemPrompt = this.buildSystemPrompt(context);
     const messages = [
       { role: 'system' as const, content: systemPrompt },
       { role: 'user' as const, content: prompt }
     ];
 
+    // Estimate tokens (rough estimate: 1 token ≈ 4 characters)
+    const estimatedInputTokens = Math.ceil((systemPrompt.length + prompt.length) / 4);
+    const estimatedOutputTokens = 4000; // Increased for GPT-5 (reasoning tokens + content tokens)
+
+    // Select model using smart selection service
+    let selectedModel: ModelName = this.defaultModel;
+    if (userId) {
+      try {
+        const modelSelection = await modelSelectionService.selectModel(
+          userId,
+          taskType,
+          estimatedInputTokens,
+          estimatedOutputTokens
+        );
+        selectedModel = modelSelection.model;
+        
+        if (import.meta.env.DEV) {
+          console.log(`[Model Selection] ${modelSelection.reason}`);
+        }
+      } catch (error) {
+        console.error('Error selecting model, using default:', error);
+      }
+    }
+
     try {
+      // Map internal model name to actual OpenAI API model name
+      const apiModelName = getAPIModelName(selectedModel);
+      
       const response = await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -116,23 +159,109 @@ class AIService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: this.model,
+          model: apiModelName, // Use actual OpenAI model name
           messages,
-          max_tokens: 1000,
-          temperature: 0.7,
+          max_completion_tokens: 4000, // GPT-5 uses max_completion_tokens - increased to allow for reasoning tokens + content
+          // Note: GPT-5 models use reasoning tokens separately, so we need more tokens for actual content
+          // Note: GPT-5 models only support default temperature (1), so we omit it
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`OpenAI API error: ${response.statusText}`);
+        const errorText = await response.text();
+        let errorMessage = `OpenAI API error: ${response.statusText}`;
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.error?.message) {
+            errorMessage = `OpenAI API error: ${errorData.error.message}`;
+            // Log model name for debugging
+            if (import.meta.env.DEV) {
+              console.error(`[AI Service] Model used: ${apiModelName}`);
+              console.error(`[AI Service] Full error:`, errorData);
+            }
+          }
+        } catch {
+          // If error response isn't JSON, use the text as-is
+          if (import.meta.env.DEV) {
+            console.error(`[AI Service] Model used: ${apiModelName}`);
+            console.error(`[AI Service] Error response:`, errorText);
+          }
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
-      return data.choices[0]?.message?.content || '';
+      
+      if (import.meta.env.DEV) {
+        console.log('[AI Service] Full API response:', JSON.stringify(data, null, 2));
+        console.log('[AI Service] Choices:', data.choices);
+        console.log('[AI Service] First choice:', data.choices?.[0]);
+        console.log('[AI Service] Message:', data.choices?.[0]?.message);
+        console.log('[AI Service] Message content:', data.choices?.[0]?.message?.content);
+        console.log('[AI Service] Choice content:', data.choices?.[0]?.content);
+        console.log('[AI Service] Choice text:', data.choices?.[0]?.text);
+      }
+      
+      // GPT-5 response structure - extract content from choices array
+      let content = '';
+      if (data.choices && data.choices.length > 0 && data.choices[0]) {
+        const choice = data.choices[0];
+        // Try different possible content locations
+        content = choice.message?.content || 
+                  choice.content || 
+                  choice.text || 
+                  choice.delta?.content ||
+                  '';
+        
+        // If still empty, log the entire choice structure
+        if (!content && import.meta.env.DEV) {
+          console.warn('[AI Service] Choice structure:', JSON.stringify(choice, null, 2));
+        }
+      } else if (data.content) {
+        content = data.content;
+      } else if (data.text) {
+        content = data.text;
+      }
+      
+      if (import.meta.env.DEV) {
+        console.log('[AI Service] Extracted content:', content);
+        console.log('[AI Service] Content length:', content.length);
+      }
+      
+      if (!content) {
+        console.warn('[AI Service] No content found in response. Full response:', data);
+      }
+      
+      // Track usage and costs
+      if (userId && data.usage) {
+        const inputTokens = data.usage.prompt_tokens || estimatedInputTokens;
+        const outputTokens = data.usage.completion_tokens || estimatedOutputTokens;
+        const actualCost = this.calculateCost(selectedModel, inputTokens, outputTokens);
+        
+        await modelSelectionService.trackUsage(
+          userId,
+          selectedModel,
+          inputTokens,
+          outputTokens,
+          actualCost
+        );
+      }
+      
+      return content;
     } catch (error) {
       console.error('AI Service Error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Calculate actual cost from API response
+   */
+  private calculateCost(model: ModelName, inputTokens: number, outputTokens: number): number {
+    const costs = MODEL_COSTS[model];
+    const inputCost = (inputTokens / 1_000_000) * costs.input;
+    const outputCost = (outputTokens / 1_000_000) * costs.output;
+    return inputCost + outputCost;
   }
 
   // Legacy method - kept for backward compatibility
@@ -189,9 +318,16 @@ Return a JSON object with:
   }
 
   // Chat with AI assistant
-  async chatWithAI(message: string, context: WritingContext, chatHistory: AIChatMessage[] = []): Promise<string> {
-    console.log('AI Service: Starting chat with message:', message);
-    console.log('AI Service: API Key exists:', !!this.apiKey);
+  async chatWithAI(
+    message: string, 
+    context: WritingContext, 
+    chatHistory: AIChatMessage[] = [],
+    userId?: string
+  ): Promise<string> {
+    if (import.meta.env.DEV) {
+      console.log('AI Service: Starting chat with message:', message);
+      console.log('AI Service: API Key exists:', !!this.apiKey);
+    }
     
     const systemPrompt = this.buildSystemPrompt(context);
     const messages = [
@@ -200,8 +336,41 @@ Return a JSON object with:
       { role: 'user' as const, content: message }
     ];
 
+    // Estimate tokens
+    const estimatedInputTokens = Math.ceil(
+      (systemPrompt.length + message.length + 
+       chatHistory.slice(-10).reduce((sum, msg) => sum + msg.content.length, 0)) / 4
+    );
+    const estimatedOutputTokens = 4000; // Increased for GPT-5 (reasoning tokens + content tokens)
+
+    // Select model
+    let selectedModel: ModelName = this.defaultModel;
+    if (userId) {
+      try {
+        const modelSelection = await modelSelectionService.selectModel(
+          userId,
+          'chat',
+          estimatedInputTokens,
+          estimatedOutputTokens
+        );
+        selectedModel = modelSelection.model;
+        
+        if (import.meta.env.DEV) {
+          console.log(`[Model Selection] ${modelSelection.reason}`);
+        }
+      } catch (error) {
+        console.error('Error selecting model, using default:', error);
+      }
+    }
+
     try {
-      console.log('AI Service: Sending request to OpenAI...');
+      if (import.meta.env.DEV) {
+        console.log('AI Service: Sending request to OpenAI...');
+      }
+      
+      // Map internal model name to actual OpenAI API model name
+      const apiModelName = getAPIModelName(selectedModel);
+      
       const response = await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -209,24 +378,94 @@ Return a JSON object with:
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: this.model,
+          model: apiModelName, // Use actual OpenAI model name
           messages,
-          max_tokens: 1500,
-          temperature: 0.8,
+          max_completion_tokens: 4000, // GPT-5 uses max_completion_tokens - increased to allow for reasoning tokens + content
+          // Note: GPT-5 models use reasoning tokens separately, so we need more tokens for actual content
+          // Note: GPT-5 models only support default temperature (1), so we omit it
         }),
       });
 
-      console.log('AI Service: Response status:', response.status);
+      if (import.meta.env.DEV) {
+        console.log('AI Service: Response status:', response.status);
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
+        let errorMessage = `OpenAI API error: ${response.statusText}`;
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.error?.message) {
+            errorMessage = `OpenAI API error: ${errorData.error.message}`;
+            if (import.meta.env.DEV) {
+              console.error(`[AI Service] Model used: ${apiModelName}`);
+              console.error(`[AI Service] Full error:`, errorData);
+            }
+          }
+        } catch {
+          if (import.meta.env.DEV) {
+            console.error(`[AI Service] Model used: ${apiModelName}`);
+            console.error(`[AI Service] Error response:`, errorText);
+          }
+        }
         console.error('AI Service: API Error Response:', errorText);
-        throw new Error(`OpenAI API error: ${response.statusText}`);
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
-      console.log('AI Service: Response data:', data);
-      return data.choices[0]?.message?.content || '';
+      
+      if (import.meta.env.DEV) {
+        console.log('[AI Service] Full API response:', JSON.stringify(data, null, 2));
+        console.log('[AI Service] Choices:', data.choices);
+        console.log('[AI Service] First choice:', data.choices?.[0]);
+        console.log('[AI Service] Message:', data.choices?.[0]?.message);
+        console.log('[AI Service] Message content:', data.choices?.[0]?.message?.content);
+      }
+      
+      // GPT-5 response structure - extract content from choices array
+      let content = '';
+      if (data.choices && data.choices.length > 0 && data.choices[0]) {
+        const choice = data.choices[0];
+        content = choice.message?.content || 
+                  choice.content || 
+                  choice.text || 
+                  choice.delta?.content ||
+                  '';
+        
+        if (!content && import.meta.env.DEV) {
+          console.warn('[AI Service] Choice structure:', JSON.stringify(choice, null, 2));
+        }
+      } else if (data.content) {
+        content = data.content;
+      } else if (data.text) {
+        content = data.text;
+      }
+      
+      if (import.meta.env.DEV) {
+        console.log('[AI Service] Extracted content:', content);
+        console.log('[AI Service] Content length:', content.length);
+      }
+      
+      if (!content) {
+        console.warn('[AI Service] No content found in response. Full response:', data);
+      }
+      
+      // Track usage and costs
+      if (userId && data.usage) {
+        const inputTokens = data.usage.prompt_tokens || estimatedInputTokens;
+        const outputTokens = data.usage.completion_tokens || estimatedOutputTokens;
+        const actualCost = this.calculateCost(selectedModel, inputTokens, outputTokens);
+        
+        await modelSelectionService.trackUsage(
+          userId,
+          selectedModel,
+          inputTokens,
+          outputTokens,
+          actualCost
+        );
+      }
+      
+      return content;
     } catch (error) {
       console.error('AI Chat Error:', error);
       throw error;
@@ -241,13 +480,42 @@ Return a JSON object with:
    * Get structured inline edits for the selected text
    * This is the main method for the inline editing system
    */
-  async getInlineEdits(request: InlineEditRequest): Promise<AIEditResponse> {
+  async getInlineEdits(request: InlineEditRequest, userId?: string): Promise<AIEditResponse> {
     try {
       const systemPrompt = this.buildInlineEditSystemPrompt(request);
       const userPrompt = this.buildInlineEditUserPrompt(request);
 
-      console.log('AI Service: Requesting inline edits for mode:', request.mode);
+      if (import.meta.env.DEV) {
+        console.log('AI Service: Requesting inline edits for mode:', request.mode);
+      }
 
+      // Estimate tokens
+      const estimatedInputTokens = Math.ceil((systemPrompt.length + userPrompt.length) / 4);
+      const estimatedOutputTokens = 4000; // Increased for GPT-5 (reasoning tokens + content tokens)
+
+      // Select model using smart selection
+      let selectedModel: ModelName = this.defaultModel;
+      if (userId) {
+        try {
+          const modelSelection = await modelSelectionService.selectModel(
+            userId,
+            request.mode,
+            estimatedInputTokens,
+            estimatedOutputTokens
+          );
+          selectedModel = modelSelection.model;
+          
+          if (import.meta.env.DEV) {
+            console.log(`[Model Selection] ${modelSelection.reason}`);
+          }
+        } catch (error) {
+          console.error('Error selecting model, using default:', error);
+        }
+      }
+
+      // Map internal model name to actual OpenAI API model name
+      const apiModelName = getAPIModelName(selectedModel);
+      
       const response = await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -255,25 +523,73 @@ Return a JSON object with:
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: this.model,
+          model: apiModelName, // Use actual OpenAI model name
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
           ],
-          max_tokens: 2000,
-          temperature: 0.7,
+          max_completion_tokens: 4000, // GPT-5 uses max_completion_tokens - increased to allow for reasoning tokens + content
+          // Note: GPT-5 models use reasoning tokens separately, so we need more tokens for actual content
+          // Note: GPT-5 models only support default temperature (1), so we omit it
           response_format: { type: "json_object" } // Force JSON response
         }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
+        let errorMessage = `OpenAI API error: ${response.statusText}`;
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.error?.message) {
+            errorMessage = `OpenAI API error: ${errorData.error.message}`;
+            if (import.meta.env.DEV) {
+              console.error(`[AI Service] Model used: ${apiModelName}`);
+              console.error(`[AI Service] Full error:`, errorData);
+            }
+          }
+        } catch {
+          if (import.meta.env.DEV) {
+            console.error(`[AI Service] Model used: ${apiModelName}`);
+            console.error(`[AI Service] Error response:`, errorText);
+          }
+        }
         console.error('AI Service: Inline Edit Error:', errorText);
-        throw new Error(`OpenAI API error: ${response.statusText}`);
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
-      const content = data.choices[0]?.message?.content || '{}';
+      
+      if (import.meta.env.DEV) {
+        console.log('[AI Service] Inline edits API response:', JSON.stringify(data, null, 2));
+        console.log('[AI Service] Choices:', data.choices);
+        console.log('[AI Service] First choice:', data.choices?.[0]);
+        console.log('[AI Service] Message:', data.choices?.[0]?.message);
+      }
+      
+      // GPT-5 response structure - extract content from choices array
+      let content = '{}';
+      if (data.choices && data.choices.length > 0 && data.choices[0]) {
+        const choice = data.choices[0];
+        content = choice.message?.content || 
+                  choice.content || 
+                  choice.text || 
+                  choice.delta?.content ||
+                  '{}';
+        
+        if (!content || content === '{}') {
+          if (import.meta.env.DEV) {
+            console.warn('[AI Service] Choice structure:', JSON.stringify(choice, null, 2));
+          }
+        }
+      } else if (data.content) {
+        content = data.content;
+      } else if (data.text) {
+        content = data.text;
+      }
+      
+      if (import.meta.env.DEV) {
+        console.log('[AI Service] Extracted content for inline edits:', content);
+      }
       
       // Parse the JSON response
       const parsedResponse = JSON.parse(content);
@@ -283,6 +599,21 @@ Return a JSON object with:
         ...edit,
         id: `edit-${Date.now()}-${index}`
       })) || [];
+
+      // Track usage and costs
+      if (userId && data.usage) {
+        const inputTokens = data.usage.prompt_tokens || estimatedInputTokens;
+        const outputTokens = data.usage.completion_tokens || estimatedOutputTokens;
+        const actualCost = this.calculateCost(selectedModel, inputTokens, outputTokens);
+        
+        await modelSelectionService.trackUsage(
+          userId,
+          selectedModel,
+          inputTokens,
+          outputTokens,
+          actualCost
+        );
+      }
 
       return {
         edits: editsWithIds,

@@ -5,6 +5,7 @@ import { loreExtractionService } from '../../services/loreExtractionService';
 import type { SeriesLore } from '../../documentService';
 import type { LoreUpdate } from '../../services/loreExtractionService';
 import { Editor } from '@tiptap/react';
+import { useAuth } from '../../contexts/AuthContext';
 import './CursorStyleChat.scss';
 
 interface CursorStyleChatProps {
@@ -68,6 +69,7 @@ export const CursorStyleChat: React.FC<CursorStyleChatProps> = ({
   onMessagesUpdate,
   onLoreStatusChange,
 }) => {
+  const { user } = useAuth();
   const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -170,11 +172,22 @@ IMPORTANT FORMATTING:
 - Format your response as plain text with proper paragraph breaks`;
 
       // Call AI service with enhanced context
-      const response = await aiService.generateContent(prompt, {
-        selectedText: '',
-        surroundingText: immediateContext,
-        lore,
-      });
+      const response = await aiService.generateContent(
+        prompt, 
+        {
+          selectedText: '',
+          surroundingText: immediateContext,
+          lore,
+        },
+        user?.uid || undefined, // Pass userId for model selection
+        'continue' // Task type for model selection
+      );
+
+      // Check if response is empty
+      if (!response || response.trim().length === 0) {
+        console.warn('[CursorStyleChat] Empty response from AI service');
+        throw new Error('AI service returned an empty response. Please try again.');
+      }
 
       // Add AI response as pending
       const aiMessage: ChatMessage = {
@@ -333,11 +346,22 @@ IMPORTANT FORMATTING:
 - Use single line breaks (\\n) for line breaks within dialogue or poetry
 - Format your response as plain text with proper paragraph breaks`;
 
-        const response = await aiService.generateContent(prompt, {
-          selectedText: originalMessage.content,
-          surroundingText: immediateContext,
-          lore,
-        });
+        const response = await aiService.generateContent(
+          prompt, 
+          {
+            selectedText: originalMessage.content,
+            surroundingText: immediateContext,
+            lore,
+          },
+          user?.uid || undefined, // Pass userId for model selection
+          'improve' // Task type for revision
+        );
+        
+        // Check if response is empty
+        if (!response || response.trim().length === 0) {
+          console.warn('[CursorStyleChat] Empty response from AI service');
+          throw new Error('AI service returned an empty response. Please try again.');
+        }
 
         const revisedMessage: ChatMessage = {
           id: `msg-${Date.now()}`,

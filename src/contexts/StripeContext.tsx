@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { SUBSCRIPTION_PLANS, getPlanById } from '../lib/stripe';
+import { API_ENDPOINTS } from '../config/api';
 
 interface Subscription {
   id: string;
@@ -30,9 +31,23 @@ export function StripeProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   // Get current plan based on subscription status
-  const currentPlan = subscription 
-    ? getPlanById(subscription.planId) || SUBSCRIPTION_PLANS.free
-    : SUBSCRIPTION_PLANS.free;
+  // If subscription is canceled and expired, treat as free
+  const getCurrentPlan = () => {
+    if (!subscription) return SUBSCRIPTION_PLANS.free;
+    
+    const now = new Date();
+    const isExpired = subscription.status === 'canceled' && 
+                     subscription.currentPeriodEnd && 
+                     new Date(subscription.currentPeriodEnd) <= now;
+    
+    if (isExpired) {
+      return SUBSCRIPTION_PLANS.free;
+    }
+    
+    return getPlanById(subscription.planId) || SUBSCRIPTION_PLANS.free;
+  };
+  
+  const currentPlan = getCurrentPlan();
 
   // Check subscription status
   const checkSubscriptionStatus = async () => {
@@ -46,18 +61,36 @@ export function StripeProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
 
-      // TODO: Replace with actual API call to your backend
-      const response = await fetch(`/api/subscriptions/${user.uid}`);
+      // Check subscription status from backend
+      const response = await fetch(API_ENDPOINTS.getSubscription(user.uid));
       
       if (response.ok) {
         const data = await response.json();
-        setSubscription(data.subscription);
+        if (data.hasActiveSubscription && data.subscription) {
+          setSubscription({
+            id: data.subscription.id,
+            planId: data.subscription.planId || 'free',
+            status: data.subscription.status,
+            currentPeriodStart: new Date(data.subscription.currentPeriodStart * 1000),
+            currentPeriodEnd: new Date(data.subscription.currentPeriodEnd * 1000),
+            cancelAtPeriodEnd: false,
+          });
+        } else {
+          setSubscription(null);
+        }
       } else {
+        // No subscription found is not an error
         setSubscription(null);
       }
     } catch (err) {
-      console.error('Error checking subscription status:', err);
-      setError('Failed to check subscription status');
+      // Silently handle errors - user might not have a subscription
+      // Only log if it's not a network/CORS error
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        // Network error - backend might not be running
+        // Don't show error to user
+      } else {
+        console.error('Error checking subscription status:', err);
+      }
       setSubscription(null);
     } finally {
       setLoading(false);
@@ -74,30 +107,39 @@ export function StripeProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
 
-      // TODO: Replace with actual API call to create checkout session
-      const response = await fetch('/api/create-checkout-session', {
+      const plan = getPlanById(planId);
+      if (!plan || !plan.priceId) {
+        throw new Error('Invalid plan selected');
+      }
+
+      const response = await fetch(API_ENDPOINTS.createCheckout, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          priceId: plan.priceId,
           userId: user.uid,
-          planId,
+          userEmail: user.email || '',
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create checkout session');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to create checkout session');
       }
 
-      const { sessionId } = await response.json();
+      const { sessionId, url } = await response.json();
       
       // Redirect to Stripe Checkout
-      // This will be handled by the Stripe Checkout component
-      return sessionId;
+      if (url) {
+        window.location.href = url;
+      } else {
+        throw new Error('No checkout URL received from server');
+      }
     } catch (err) {
       console.error('Error upgrading subscription:', err);
-      setError('Failed to upgrade subscription');
+      setError(err instanceof Error ? err.message : 'Failed to upgrade subscription');
       throw err;
     } finally {
       setLoading(false);
@@ -114,8 +156,7 @@ export function StripeProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
 
-      // TODO: Replace with actual API call to cancel subscription
-      const response = await fetch('/api/cancel-subscription', {
+      const response = await fetch(API_ENDPOINTS.cancelSubscription, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

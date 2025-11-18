@@ -39,13 +39,14 @@ export const SUBSCRIPTION_PLANS = {
     features: [
       'Up to 3 books',
       '10,000 words per book',
-      '25 GPT-4 requests per month',
+      '5 GPT-5.1 requests per month',
+      'Unlimited GPT-5 requests',
       'Auto-save',
       'Cloud storage',
     ],
     limits: {
       maxBooks: 3,
-      aiRequests: 25, // GPT-4 requests per month
+      aiRequests: 25, // Total requests (5 GPT-5.1 + unlimited GPT-5 Mini/Nano)
       wordsPerBook: 10000, // 10k words per book (enough for short stories)
     },
   },
@@ -58,15 +59,15 @@ export const SUBSCRIPTION_PLANS = {
     features: [
       'Up to 15 books',
       '200,000 words per book',
-      '200 GPT-4 requests per month',
-      'Unlimited GPT-3.5 fallback',
+      'GPT-5.1 for complex tasks',
+      'Unlimited GPT-5 requests',
       'Priority support',
       'Export options',
       'Advanced editing tools',
     ],
     limits: {
       maxBooks: 15,
-      aiRequests: 200, // GPT-4 requests per month
+      aiRequests: 200, // Total requests (GPT-5.1 limited, GPT-5 Mini/Nano unlimited)
       wordsPerBook: 200000, // 200k words per book
     },
   },
@@ -79,15 +80,15 @@ export const SUBSCRIPTION_PLANS = {
     features: [
       'Unlimited books',
       'Unlimited word count',
-      '500 GPT-4 requests per month',
-      'Unlimited GPT-3.5 fallback',
+      'Enhanced GPT-5.1 allocation',
+      'Unlimited GPT-5 requests',
       'Priority support',
       'All Pro features',
       'Early access to new features',
     ],
     limits: {
       maxBooks: 'unlimited',
-      aiRequests: 500, // GPT-4 requests per month
+      aiRequests: 500, // Total requests (GPT-5.1 limited, GPT-5 Mini/Nano unlimited)
       wordsPerBook: 'unlimited',
     },
   },

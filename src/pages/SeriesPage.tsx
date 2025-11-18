@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useStripe } from '../contexts/StripeContext';
 import { getSeries, getSeriesDocuments, createDocument, deleteDocument } from '../documentService';
 import type { Series, Document } from '../documentService';
 import { Plus, ArrowLeft, BookOpen, FileText, Trash2, MoreVertical, ScrollText } from 'lucide-react';
+import { subscriptionService } from '../services/subscriptionService';
+import { usageTrackingService } from '../services/usageTrackingService';
 
 interface Book {
   id: string;
@@ -16,6 +19,7 @@ export default function SeriesPage() {
   const { seriesId } = useParams<{ seriesId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { currentPlan } = useStripe();
   const [series, setSeries] = useState<Series | null>(null);
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,10 +78,19 @@ export default function SeriesPage() {
     };
   }, [openDropdown]);
 
+
   const handleNewBook = async () => {
     if (!series || !user) return;
     
     try {
+      // Check limit before creating
+      const check = await subscriptionService.canCreateBook(user.uid);
+      if (!check.canCreate) {
+        // Redirect to pricing page to upgrade
+        navigate('/pricing');
+        return;
+      }
+      
       const newBookNumber = books.length + 1;
       const documentId = await createDocument(
         user.uid, 
@@ -89,6 +102,8 @@ export default function SeriesPage() {
       navigate(`/editor/${documentId}`);
     } catch (error) {
       console.error('Error creating new book:', error);
+      // On error, still try to redirect to pricing as fallback
+      navigate('/pricing');
     }
   };
 
@@ -107,11 +122,18 @@ export default function SeriesPage() {
   };
 
   const handleDeleteBook = async (bookId: string) => {
+    if (!user) return;
+    
     try {
       await deleteDocument(bookId);
       
+      // Track document deletion
+      await usageTrackingService.trackDocumentDeletion(user.uid);
+      
       // Remove from local state
-      setBooks(prev => prev.filter(book => book.id !== bookId));
+      const updatedBooks = books.filter(book => book.id !== bookId);
+      setBooks(updatedBooks);
+      
       
       // Close any open dropdowns
       setOpenDropdown(null);

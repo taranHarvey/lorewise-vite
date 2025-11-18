@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { aiService, type WritingContext, type AISuggestion, type ConsistencyCheck, type AIChatMessage } from '../services/aiService';
 import type { SeriesLore } from '../documentService';
+import { useAuth } from '../contexts/AuthContext';
 
 export interface UseAIOptions {
   lore?: SeriesLore;
@@ -9,6 +10,7 @@ export interface UseAIOptions {
 }
 
 export function useAI(options: UseAIOptions = {}) {
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
@@ -34,7 +36,7 @@ export function useAI(options: UseAIOptions = {}) {
     try {
       abortControllerRef.current = new AbortController();
       const context = buildContext();
-      const result = await aiService.generateContent(prompt, context);
+      const result = await aiService.generateContent(prompt, context, user?.uid || undefined, 'improve');
       return result;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
@@ -132,7 +134,7 @@ export function useAI(options: UseAIOptions = {}) {
       const context = buildContext();
       console.log('useAI: Context built:', context);
       console.log('useAI: Calling aiService.chatWithAI');
-      const response = await aiService.chatWithAI(message, context, chatHistory);
+      const response = await aiService.chatWithAI(message, context, chatHistory, user?.uid || undefined);
       console.log('useAI: Response received:', response);
       return response;
     } catch (err) {
@@ -144,7 +146,7 @@ export function useAI(options: UseAIOptions = {}) {
       console.log('useAI: Setting loading to false');
       setIsLoading(false);
     }
-  }, [buildContext, chatHistory]);
+  }, [buildContext, chatHistory, user?.uid]);
 
   // Clear chat history
   const clearChatHistory = useCallback(() => {

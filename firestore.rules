@@ -2,9 +2,95 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow all authenticated users to read/write (DEVELOPMENT ONLY)
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper to check if user owns a series
+    function ownsSeries(seriesId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/series/$(seriesId)) &&
+        get(/databases/$(database)/documents/series/$(seriesId)).data.userId == request.auth.uid;
+    }
+    
+    // Documents collection
+    match /documents/{documentId} {
+      // Allow read if:
+      // 1. User owns the document directly (userId matches), OR
+      // 2. Document belongs to a series the user owns (for queries by seriesId)
+      allow read: if isAuthenticated() && (
+        // Direct ownership
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        // Ownership through series (allows queries by seriesId)
+        (resource != null && 
+         resource.data.seriesId != null && 
+         ownsSeries(resource.data.seriesId))
+      );
+      
+      // Can create if setting userId to current user
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.seriesId != null;
+      
+      // Can update/delete if user owns the document
+      allow update, delete: if isAuthenticated() && 
+        resource != null && 
+        resource.data.userId == request.auth.uid;
+    }
+    
+    // Series collection
+    match /series/{seriesId} {
+      // Can read if series doesn't exist OR if user owns it
+      allow read: if isAuthenticated() && 
+        (resource == null || resource.data.userId == request.auth.uid);
+      
+      // Can create if setting userId to current user
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid;
+      
+      // Can update/delete if user owns the series
+      allow update, delete: if isAuthenticated() && 
+        resource != null && 
+        resource.data.userId == request.auth.uid;
+    }
+    
+    // Series Lore collection
+    match /seriesLore/{loreId} {
+      // Allow reading if user owns the lore OR owns the parent series
+      allow read: if isAuthenticated() && (
+        // Direct ownership
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        // Ownership through series
+        (resource != null && 
+         resource.data.seriesId != null && 
+         ownsSeries(resource.data.seriesId))
+      );
+      
+      // Can create if setting userId to current user
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.seriesId != null;
+      
+      // Can update/delete if user owns the lore
+      allow update, delete: if isAuthenticated() && 
+        resource != null && 
+        resource.data.userId == request.auth.uid;
+    }
+    
+    // User subscriptions collection
+    match /userSubscriptions/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // User usage tracking collection
+    match /userUsage/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // User AI costs tracking collection
+    match /userAICosts/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
     }
   }
 }

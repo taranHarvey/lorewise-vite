@@ -104,22 +104,38 @@ export const updateDocument = async (documentId: string, updates: DocumentUpdate
 export const deleteDocument = async (documentId: string): Promise<void> => {
   try {
     const docRef = doc(db, 'documents', documentId);
+    console.log('[deleteDocument] Attempting to delete document:', documentId);
     await deleteDoc(docRef);
-  } catch (error) {
-    console.error('Error deleting document:', error);
+    console.log('[deleteDocument] Successfully deleted document:', documentId);
+  } catch (error: any) {
+    console.error('[deleteDocument] Error deleting document:', error);
+    console.error('[deleteDocument] Error code:', error?.code);
+    console.error('[deleteDocument] Error message:', error?.message);
     throw error;
   }
 };
 
-export const getUserDocuments = async (userId: string): Promise<Document[]> => {
+export const getUserDocuments = async (userId: string, forceServer = false): Promise<Document[]> => {
   try {
     const q = query(collection(db, 'documents'), where('userId', '==', userId));
-    const querySnapshot = await getDocs(q);
     
-    return querySnapshot.docs.map(doc => ({
+    // Force fresh data from server if requested (bypasses cache)
+    let querySnapshot;
+    if (forceServer) {
+      const { getDocsFromServer } = await import('firebase/firestore');
+      querySnapshot = await getDocsFromServer(q);
+      console.log('[getUserDocuments] Fetched from server (bypassed cache)');
+    } else {
+      querySnapshot = await getDocs(q);
+    }
+    
+    const documents = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     } as Document));
+    
+    console.log('[getUserDocuments] Found', documents.length, 'documents for user', userId);
+    return documents;
   } catch (error) {
     console.error('Error getting user documents:', error);
     throw error;

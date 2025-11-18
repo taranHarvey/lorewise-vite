@@ -1,12 +1,16 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Search, BookOpen, Settings, User, LogOut, Sparkles, Calendar, FileText, MoreVertical, Edit, Trash2, Eye } from 'lucide-react';
+import { useStripe } from '../contexts/StripeContext';
+import { Plus, Search, BookOpen, Settings, User, LogOut, Sparkles, Calendar, FileText, MoreVertical, Edit, Trash2, Eye, Crown, ArrowRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getUserSeries, getUserDocuments, getSeriesDocumentCount, updateSeries, deleteSeries, createSeries, createDocument, getSeriesDocuments } from '../documentService';
 import type { Series } from '../documentService';
+import { usageTrackingService } from '../services/usageTrackingService';
+import { SubscriptionTier } from '../config/subscriptionTiers';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
+  const { currentPlan } = useStripe();
   const navigate = useNavigate();
   const [seriesCount, setSeriesCount] = useState(0);
   const [documentsCount, setDocumentsCount] = useState(0);
@@ -25,8 +29,24 @@ export default function Dashboard() {
     setIsNavigating(true);
     
     try {
+      // Check limit before creating
+      const tier = currentPlan.id === 'free' ? SubscriptionTier.FREE :
+                  currentPlan.id === 'pro' ? SubscriptionTier.PRO :
+                  SubscriptionTier.PREMIUM;
+      
+      const check = await usageTrackingService.canCreateSeries(user.uid, tier);
+      if (!check.allowed) {
+        // Redirect to pricing page to upgrade
+        navigate('/pricing');
+        setIsNavigating(false);
+        return;
+      }
+      
       // Create a new series
       const seriesId = await createSeries(user.uid, 'My New Series', 'Start your writing journey here');
+      
+      // Track series creation
+      await usageTrackingService.trackSeriesCreation(user.uid);
       
       // Navigate to the series page
       navigate(`/series/${seriesId}`);
@@ -35,6 +55,8 @@ export default function Dashboard() {
       setIsNavigating(false);
     } catch (error) {
       console.error('Error creating new series:', error);
+      // On error, redirect to pricing as fallback
+      navigate('/pricing');
       setIsNavigating(false);
     }
   };
@@ -82,11 +104,15 @@ export default function Dashboard() {
     try {
       await deleteSeries(seriesId);
       
+      // Track series deletion
+      await usageTrackingService.trackSeriesDeletion(user.uid);
+      
       // Update local state
       setSeries(prev => prev.filter(s => s.id !== seriesId));
       setSeriesCount(prev => prev - 1);
       setShowDeleteConfirm(null);
       setOpenDropdown(null);
+      
     } catch (error) {
       console.error('Error deleting series:', error);
     }
@@ -184,6 +210,34 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Upgrade Banner - Show for free plan */}
+        {currentPlan.id === 'free' && (
+          <div className="mb-6 animate-fade-in-up">
+            <div className="bg-gradient-to-r from-primary-500 to-accent-500 rounded-xl p-6 text-white shadow-lg">
+              <div className="flex items-center justify-between gap-6">
+                <div className="flex items-center space-x-4 flex-1">
+                  <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <Crown className="w-6 h-6" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-xl font-bold mb-1">Unlock Premium Features</h3>
+                    <p className="text-primary-100">
+                      Get unlimited books, more AI requests, and advanced features to supercharge your writing
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  to="/pricing"
+                  className="bg-white text-primary-600 px-8 py-4 rounded-lg font-semibold hover:bg-primary-50 transition-colors flex items-center space-x-2 flex-shrink-0 shadow-md hover:shadow-lg transition-all"
+                >
+                  <span>Upgrade Now</span>
+                  <ArrowRight className="w-5 h-5" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Welcome Section */}
         <div className="mb-8 animate-fade-in-up">
           <div className="flex items-center space-x-3 mb-4">
@@ -267,7 +321,7 @@ export default function Dashboard() {
                   <span>Created {seriesItem.createdAt.toDate().toLocaleDateString()}</span>
                   <span className="flex items-center gap-1">
                     <FileText className="w-4 h-4" />
-                    <span>{seriesDocumentCounts[seriesItem.id] || 0} chapters</span>
+                    <span>{seriesDocumentCounts[seriesItem.id] || 0} books</span>
                   </span>
                 </div>
               </div>
@@ -382,7 +436,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
             <h3 className="text-lg font-semibold text-red-600 mb-4">Delete Series</h3>
             <p className="text-gray-600 mb-6">
-              Are you sure you want to delete this series? This action cannot be undone and will delete all chapters within this series.
+              Are you sure you want to delete this series? This action cannot be undone and will delete all books within this series.
             </p>
             <div className="flex space-x-3">
               <button

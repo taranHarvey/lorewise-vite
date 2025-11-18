@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { StripeProvider } from './contexts/StripeContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
@@ -36,52 +37,62 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <AuthProvider>
-      <StripeProvider>
-        <Router>
-          <div className="min-h-screen bg-gradient-to-br from-secondary-50 via-white to-primary-50">
-            <Routes>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/auth" element={<AuthPage />} />
-              <Route path="/pricing" element={<PricingPage />} />
-              <Route 
-                path="/dashboard" 
-                element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/series/:seriesId" 
-                element={
-                  <ProtectedRoute>
-                    <SeriesPage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/editor/:id" 
-                element={
-                  <ProtectedRoute>
-                    <Editor />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/settings" 
-                element={
-                  <ProtectedRoute>
-                    <Settings />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </div>
-        </Router>
-      </StripeProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <StripeProvider>
+          <Router>
+            <div className="min-h-screen bg-gradient-to-br from-secondary-50 via-white to-primary-50">
+              <Routes>
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/auth" element={<AuthPage />} />
+                <Route path="/pricing" element={<PricingPage />} />
+                <Route 
+                  path="/dashboard" 
+                  element={
+                    <ProtectedRoute>
+                      <ErrorBoundary>
+                        <Dashboard />
+                      </ErrorBoundary>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/series/:seriesId" 
+                  element={
+                    <ProtectedRoute>
+                      <ErrorBoundary>
+                        <SeriesPage />
+                      </ErrorBoundary>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/editor/:id" 
+                  element={
+                    <ProtectedRoute>
+                      <ErrorBoundary>
+                        <Editor />
+                      </ErrorBoundary>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/settings" 
+                  element={
+                    <ProtectedRoute>
+                      <ErrorBoundary>
+                        <Settings />
+                      </ErrorBoundary>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </div>
+          </Router>
+        </StripeProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

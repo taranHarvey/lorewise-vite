@@ -4,6 +4,7 @@ import { aiService } from '../services/aiService';
 import type { AIEdit, AIActionMode, InlineEditRequest, ReferenceDocument } from '../services/aiService';
 import { getAISuggestions } from '../components/TiptapEditor/AISuggestionsExtension';
 import type { SeriesLore } from '../documentService';
+import { useAuth } from '../contexts/AuthContext';
 
 interface UseAIInlineEditProps {
   editor: Editor | null;
@@ -12,6 +13,7 @@ interface UseAIInlineEditProps {
 }
 
 export function useAIInlineEdit({ editor, lore, references = [] }: UseAIInlineEditProps) {
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<AIEdit[]>([]);
@@ -94,7 +96,7 @@ export function useAIInlineEdit({ editor, lore, references = [] }: UseAIInlineEd
         fullDocumentText: fullDocumentText || undefined,
       };
 
-      const response = await aiService.getInlineEdits(request);
+      const response = await aiService.getInlineEdits(request, user?.uid || undefined);
 
       if (response.success && response.edits.length > 0) {
         // Adjust edit ranges to be relative to document position

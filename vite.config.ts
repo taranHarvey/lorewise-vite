@@ -5,7 +5,8 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    proxy: {
+    // Only enable proxy in development mode
+    proxy: process.env.NODE_ENV !== 'production' ? {
       '/api/openai': {
         target: 'https://api.openai.com',
         changeOrigin: true,
@@ -22,6 +23,6 @@ export default defineConfig({
           });
         },
       }
-    }
+    } : undefined
   }
 })

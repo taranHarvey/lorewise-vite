@@ -83,10 +83,12 @@ export default function PricingPage() {
 
     try {
       setSelectedPlan(planId);
+      // upgradeSubscription will redirect to Stripe checkout
       await upgradeSubscription(planId);
+      // Note: The redirect happens in upgradeSubscription, so we won't reach here
     } catch (error) {
       console.error('Error selecting plan:', error);
-    } finally {
+      alert(error instanceof Error ? error.message : 'Failed to start checkout. Please try again.');
       setSelectedPlan(null);
     }
   };

@@ -1,14 +1,19 @@
 import { useAuth } from '../contexts/AuthContext';
-import { BookOpen, User, Mail, LogOut, ArrowLeft, Settings as SettingsIcon, Trash2, AlertTriangle } from 'lucide-react';
+import { useStripe } from '../contexts/StripeContext';
+import { BookOpen, User, Mail, LogOut, ArrowLeft, Settings as SettingsIcon, Trash2, AlertTriangle, Crown, CreditCard, RefreshCw } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { deleteAllUserData } from '../documentService';
+import { SUBSCRIPTION_PLANS, formatPrice } from '../lib/stripe';
 
 export default function Settings() {
   const { user, logout, deleteAccount } = useAuth();
+  const { subscription, currentPlan, loading: subscriptionLoading, cancelSubscription, checkSubscriptionStatus, upgradeSubscription } = useStripe();
   const navigate = useNavigate();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isCanceling, setIsCanceling] = useState(false);
+  const [isUpgrading, setIsUpgrading] = useState(false);
 
   const handleDeleteAccount = async () => {
     if (!user) return;
@@ -68,6 +73,138 @@ export default function Settings() {
         </div>
 
         <div className="grid gap-6 animate-fade-in-up animation-delay-200">
+          {/* Subscription Management */}
+          <div className="card p-6">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="w-10 h-10 bg-primary-100 rounded-xl flex items-center justify-center">
+                <Crown className="w-5 h-5 text-primary-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-secondary-900">Subscription</h2>
+                <p className="text-sm text-secondary-600">Manage your subscription and billing</p>
+              </div>
+            </div>
+            
+            {subscriptionLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <RefreshCw className="w-6 h-6 text-primary-600 animate-spin" />
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Current Plan Info */}
+                <div className="p-4 bg-gradient-to-r from-primary-50 to-accent-50 rounded-lg border border-primary-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="text-sm text-secondary-600 mb-1">Current Plan</p>
+                      <h3 className="text-2xl font-bold text-secondary-900 flex items-center">
+                        {currentPlan.name}
+                        {currentPlan.id !== 'free' && (
+                          <Crown className="w-5 h-5 text-primary-600 ml-2" />
+                        )}
+                      </h3>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-primary-600">
+                        {currentPlan.id === 'free' ? 'Free' : formatPrice(currentPlan.price)}
+                      </p>
+                      {currentPlan.id !== 'free' && (
+                        <p className="text-sm text-secondary-600">/month</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {subscription && subscription.currentPeriodEnd && (
+                    <p className="text-sm text-secondary-600 mt-2">
+                      {subscription.cancelAtPeriodEnd ? (
+                        <span className="text-error-600">
+                          Cancels on {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+                        </span>
+                      ) : (
+                        <span>
+                          Renews on {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+                        </span>
+                      )}
+                    </p>
+                  )}
+                </div>
+
+                {/* Plan Features */}
+                <div>
+                  <p className="text-sm font-medium text-secondary-700 mb-2">Current Plan Features:</p>
+                  <ul className="space-y-2">
+                    {currentPlan.features.map((feature, index) => (
+                      <li key={index} className="flex items-center text-sm text-secondary-600">
+                        <div className="w-1.5 h-1.5 bg-primary-500 rounded-full mr-2" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-secondary-200">
+                  {currentPlan.id === 'free' ? (
+                    <button
+                      onClick={async () => {
+                        setIsUpgrading(true);
+                        try {
+                          navigate('/pricing');
+                        } finally {
+                          setIsUpgrading(false);
+                        }
+                      }}
+                      className="btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500 px-8 py-3 rounded-lg font-semibold flex items-center space-x-3 shadow-md hover:shadow-lg transition-all"
+                    >
+                      <CreditCard className="w-5 h-5" />
+                      <span>Upgrade Plan</span>
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={async () => {
+                          setIsUpgrading(true);
+                          try {
+                            navigate('/pricing');
+                          } finally {
+                            setIsUpgrading(false);
+                          }
+                        }}
+                        className="btn btn-outline text-primary-600 border-primary-300 hover:bg-primary-50 px-8 py-3 rounded-lg font-semibold flex items-center space-x-3"
+                      >
+                        <CreditCard className="w-5 h-5" />
+                        <span>Change Plan</span>
+                      </button>
+                      {subscription && !subscription.cancelAtPeriodEnd && (
+                        <button
+                          onClick={async () => {
+                            if (!confirm('Are you sure you want to cancel your subscription? You will continue to have access until the end of your billing period.')) {
+                              return;
+                            }
+                            setIsCanceling(true);
+                            try {
+                              await cancelSubscription();
+                              await checkSubscriptionStatus();
+                              alert('Subscription canceled. You will continue to have access until the end of your billing period.');
+                            } catch (error) {
+                              console.error('Error canceling subscription:', error);
+                              alert('Failed to cancel subscription. Please try again.');
+                            } finally {
+                              setIsCanceling(false);
+                            }
+                          }}
+                          disabled={isCanceling}
+                          className="btn btn-outline text-error-600 border-error-300 hover:bg-error-50 disabled:opacity-50"
+                        >
+                          {isCanceling ? 'Canceling...' : 'Cancel Subscription'}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Account Information */}
           <div className="card p-6">
             <div className="flex items-center space-x-3 mb-6">
@@ -175,7 +312,7 @@ export default function Settings() {
             
             <ul className="list-disc list-inside text-sm text-secondary-600 mb-6 space-y-1">
               <li>All your novel series</li>
-              <li>All your documents and chapters</li>
+              <li>All your documents and books</li>
               <li>Your account and profile</li>
               <li>All associated data</li>
             </ul>
