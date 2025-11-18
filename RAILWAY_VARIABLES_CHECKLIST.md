@@ -13,7 +13,7 @@ Copy these exact variable names and values:
 
 ### 2. Stripe Secret Key ✅
 - **Name**: `STRIPE_SECRET_KEY`
-- **Value**: `sk_live_YOUR_LIVE_SECRET_KEY_HERE`
+- **Value**: `sk_live_YOUR_LIVE_SECRET_KEY_HERE` (see note below)
 - **Status**: ⏳ Add this now
 
 ### 3. Stripe Webhook Secret ⏳
@@ -39,7 +39,7 @@ Go to Railway → Variables → Add each:
 
 ```
 FIREBASE_SERVICE_ACCOUNT = [Your Firebase JSON - already added ✅]
-STRIPE_SECRET_KEY = sk_live_YOUR_LIVE_SECRET_KEY_HERE
+STRIPE_SECRET_KEY = sk_live_YOUR_LIVE_SECRET_KEY_HERE (use your actual key)
 STRIPE_WEBHOOK_SECRET = whsec_placeholder
 FRONTEND_URL = https://lorewise-89533.web.app
 NODE_ENV = production

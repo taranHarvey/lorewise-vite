@@ -37,7 +37,7 @@ Add these variables **one by one**:
 - Copy the **Secret key** (starts with `sk_live_...`)
 - Paste as value
 
-**Example**: `sk_live_YOUR_LIVE_SECRET_KEY_HERE`
+**Your key**: `sk_live_YOUR_LIVE_SECRET_KEY_HERE` (add this to Railway)
 
 ---
 
